@@ -165,7 +165,7 @@ letexp :: P STerm
 letexp = do
   i <- getPos
   reserved "let"
-  (v,ty) <- parens binding
+  (v,ty) <- (parens binding <|> binding)
   reservedOp "="  
   def <- expr
   reserved "in"
