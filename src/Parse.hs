@@ -92,7 +92,14 @@ typeP = try (do
           y <- typeP
           return (FunTy x y))
       <|> tyatom
-          
+
+manyArgs = try (do
+            x <- parens binding
+            xs <- manyArgs
+            return (x:xs))
+            <|>
+            return []
+
 const :: P Const
 const = CNat <$> num
 
@@ -130,10 +137,10 @@ binding = do v <- var
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
-         (v,ty) <- parens binding
+         xs <- manyArgs
          reservedOp "->"
          t <- expr
-         return (SLam i (v,ty) t)
+         return (SLam i xs t)
 
 -- Nota el parser app también parsea un solo atom.
 app :: P STerm
@@ -161,8 +168,8 @@ fix = do i <- getPos
          t <- expr
          return (SFix i (f,fty) (x,xty) t)
 
-letexp :: P STerm
-letexp = do
+letcorexp :: P STerm
+letcorexp = do
   i <- getPos
   reserved "let"
   (v,ty) <- (parens binding <|> binding)
@@ -171,6 +178,22 @@ letexp = do
   reserved "in"
   body <- expr
   return (SLet i (v,ty) def body)
+
+letfexp :: P STerm
+letfexp = do i <- getPos
+             reserved "let"
+             f <- var
+             (v1,t1) <- parens binding
+             reservedOp ":"
+             ty <- typeP
+             reservedOp "="
+             t <- expr
+             reserved "in"
+             t' <- expr
+             return (SLet i (f,FunTy t1 ty)(SLam i [(v1,t1)] t) t')
+
+letexp :: P STerm
+letexp = (try letcorexp) <|> letfexp 
 
 -- | Parser de términos
 tm :: P STerm
