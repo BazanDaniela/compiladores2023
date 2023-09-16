@@ -22,6 +22,7 @@ module Lang where
 
 import           Common                         ( Pos )
 import           Data.List.Extra                ( nubSort )
+import Data.Bool (Bool)
 
 -- | AST the términos superficiales
 data STm info ty var =
@@ -31,7 +32,7 @@ data STm info ty var =
   | SApp info (STm info ty var) (STm info ty var)
   | SPrint info String (STm info ty var)
   | SBinaryOp info BinaryOp (STm info ty var) (STm info ty var)
-  | SFix info (var, ty) (var, ty) (STm info ty var)
+  | SFix info (var, ty) [(var, ty)] (STm info ty var)
   | SIfZ info (STm info ty var) (STm info ty var) (STm info ty var)
   | SLet info (var, ty) (STm info ty var) (STm info ty var)
   deriving (Show, Functor)

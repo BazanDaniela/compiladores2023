@@ -93,9 +93,10 @@ typeP = try (do
           return (FunTy x y))
       <|> tyatom
 
-manyArgs = try (do
+binders :: P [(Name,Ty)]
+binders = try (do
             x <- parens binding
-            xs <- manyArgs
+            xs <- binders
             return (x:xs))
             <|>
             return []
@@ -137,7 +138,7 @@ binding = do v <- var
 lam :: P STerm
 lam = do i <- getPos
          reserved "fun"
-         xs <- manyArgs
+         xs <- binders
          reservedOp "->"
          t <- expr
          return (SLam i xs t)
@@ -163,10 +164,10 @@ fix :: P STerm
 fix = do i <- getPos
          reserved "fix"
          (f, fty) <- parens binding
-         (x, xty) <- parens binding
+         xs       <- binders
          reservedOp "->"
          t <- expr
-         return (SFix i (f,fty) (x,xty) t)
+         return (SFix i (f,fty) xs t)
 
 letcorexp :: P STerm
 letcorexp = do
@@ -184,16 +185,36 @@ letfexp = do i <- getPos
              reserved "let"
              f <- var
              (v1,t1) <- parens binding
+             xs       <- binders
              reservedOp ":"
              ty <- typeP
              reservedOp "="
              t <- expr
              reserved "in"
              t' <- expr
-             return (SLet i (f,FunTy t1 ty)(SLam i [(v1,t1)] t) t')
+             return (SLet i (f,FunTy t1 ty)(SLam i ((v1,t1):xs) t) t')
+
+letrecexp :: P STerm
+letrecexp = do i <- getPos
+               reserved "let"
+               reserved "rec"
+               f <- var
+               (v1,t1) <- parens binding
+               xs       <- binders
+               reservedOp ":"
+               ty <- typeP
+               reservedOp "="
+               t <- expr
+               reserved "in"
+               t' <- expr
+               case xs of
+                []  -> return (SLet i (f,FunTy t1 ty)(SFix i (f, FunTy t1 ty) [(v1,t1)] t) t')
+                xts -> return (SLet i (f,FunTy t1 ty)(SLam i xts (SFix i (f, FunTy t1 ty) xs t)) t')
+                
+
 
 letexp :: P STerm
-letexp = (try letcorexp) <|> letfexp 
+letexp = try letrecexp <|> try letcorexp <|> letfexp 
 
 -- | Parser de términos
 tm :: P STerm
