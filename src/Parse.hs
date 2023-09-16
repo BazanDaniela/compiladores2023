@@ -192,7 +192,11 @@ letfexp = do i <- getPos
              t <- expr
              reserved "in"
              t' <- expr
-             return (SLet i (f,FunTy t1 ty)(SLam i ((v1,t1):xs) t) t')
+             return (SLet i (f,tybinds ((v1,t1):xs) ty)(SLam i ((v1,t1):xs) t) t')
+          where
+            tybinds :: [(Name,Ty)] -> Ty -> Ty
+            tybinds [] ty     = ty
+            tybinds (x:xs) ty = FunTy (snd x) (tybinds xs ty)
 
 letrecexp :: P STerm
 letrecexp = do i <- getPos
