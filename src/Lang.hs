@@ -43,6 +43,12 @@ data Ty =
     | FunTy Ty Ty
     deriving (Show,Eq)
 
+-- | AST de Tipos superficiales
+data STy =
+      SNatTy
+    | SFunTy STy STy
+    deriving (Show,Eq)
+
 type Name = String
 
 type STerm = STm Pos Ty Name -- ^ 'STm' tiene 'Name's como variables ligadas y libres y globales, guarda posición  
@@ -57,7 +63,19 @@ data BinaryOp = Add | Sub
 data Decl a = Decl
   { declPos  :: Pos
   , declName :: Name
+  , declTy :: Ty
   , declBody :: a
+  }
+  deriving (Show, Functor)
+
+-- | tipo de datos de declaraciones para terminos superficiales
+data SDecl a = SDecl
+  { sDeclPos  :: Pos
+  , sDeclRec :: Bool
+  , sDeclName :: Name
+  , sDeclArgs :: [(Name, Ty)]
+  , sDeclTy :: Ty
+  , sDeclBody :: a
   }
   deriving (Show, Functor)
 

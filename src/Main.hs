@@ -30,7 +30,7 @@ import Global
 import Errors
 import Lang
 import Parse ( P, tm, program, declOrTm, runP )
-import Elab ( elab )
+import Elab ( elab, desugarDecl )
 import Eval ( eval )
 import PPrint ( pp , ppTy, ppDecl )
 import MonadFD4
@@ -105,7 +105,7 @@ repl args = do
                        b <- lift $ catchErrors $ handleCommand c
                        maybe loop (`when` loop) b
 
-loadFile ::  MonadFD4 m => FilePath -> m [Decl STerm]
+loadFile ::  MonadFD4 m => FilePath -> m [SDecl STerm]
 loadFile f = do
     let filename = reverse(dropWhile isSpace (reverse f))
     x <- liftIO $ catch (readFile filename)
@@ -134,25 +134,25 @@ evalDecl (Decl p x e) = do
     e' <- eval e
     return (Decl p x e')
 
-handleDecl ::  MonadFD4 m => Decl STerm -> m ()
+handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
 handleDecl d = do
         m <- getMode
         case m of
           Interactive -> do
-              (Decl p x tt) <- typecheckDecl d
+              (Decl p x tt) <- typecheckDecl (desugarDecl d)
               te <- eval tt
               addDecl (Decl p x te)
           Typecheck -> do
               f <- getLastFile
               printFD4 ("Chequeando tipos de "++f)
-              td <- typecheckDecl d
+              td <- typecheckDecl (desugarDecl d)
               addDecl td
               -- opt <- getOpt
               -- td' <- if opt then optimize td else td
               ppterm <- ppDecl td  --td'
               printFD4 ppterm
           Eval -> do
-              td <- typecheckDecl d
+              td <- typecheckDecl (desugarDecl d)
               -- td' <- if opt then optimizeDecl td else return td
               ed <- evalDecl td
               addDecl ed

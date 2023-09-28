@@ -101,6 +101,10 @@ binders = try (do
             <|>
             return []
 
+tybinds :: [(Name,Ty)] -> Ty -> Ty
+tybinds [] ty     = ty
+tybinds (x:xs) ty = FunTy (snd x) (tybinds xs ty)
+
 const :: P Const
 const = CNat <$> num
 
@@ -193,10 +197,6 @@ letfexp = do i <- getPos
              reserved "in"
              t' <- expr
              return (SLet i (f,tybinds ((v1,t1):xs) ty)(SLam i ((v1,t1):xs) t) t')
-          where
-            tybinds :: [(Name,Ty)] -> Ty -> Ty
-            tybinds [] ty     = ty
-            tybinds (x:xs) ty = FunTy (snd x) (tybinds xs ty)
 
 letrecexp :: P STerm
 letrecexp = do i <- getPos
@@ -213,34 +213,62 @@ letrecexp = do i <- getPos
                t' <- expr
                case xs of
                 []  -> return (SLet i (f,FunTy t1 ty)(SFix i (f, FunTy t1 ty) [(v1,t1)] t) t')
-                xts -> return (SLet i (f,FunTy t1 ty)(SLam i xts (SFix i (f, FunTy t1 ty) xs t)) t')
-                
-
+                xts -> return (SLet i (f,tybinds ((v1,t1):xs) ty)(SLam i xts (SFix i (f,tybinds ((v1,t1):xs) ty) xs t)) t')
 
 letexp :: P STerm
-letexp = try letrecexp <|> try letcorexp <|> letfexp 
+letexp = (try letrecexp) <|> (try letcorexp) <|> letfexp 
 
 -- | Parser de términos
 tm :: P STerm
 tm = app <|> lam <|> ifz <|> printOp <|> fix <|> letexp
 
 -- | Parser de declaraciones
-decl :: P (Decl STerm)
-decl = do 
+decl :: P (SDecl STerm)
+decl = (try declVar) <|> (try declFun) <|> declRec
+
+-- Parser declaraciones azucaradas
+declVar :: P (SDecl STerm)
+declVar = do 
      i <- getPos
      reserved "let"
-     v <- var
+     (v, ty) <- parens binding <|> binding
      reservedOp "="
      t <- expr
-     return (Decl i v t)
+     return (SDecl i False v [] ty t)
+
+declFun :: P (SDecl STerm)
+declFun = do 
+     i <- getPos
+     reserved "let"
+     f <- var
+     xs <- binders
+     reservedOp ":"
+     ty <- typeP
+     reservedOp "="
+     t <- expr
+     return (SDecl i False f xs (tybinds xs ty) t)
+
+declRec :: P (SDecl STerm)
+declRec = do 
+     i <- getPos
+     reserved "let"
+     reserved "rec"
+     f <- var
+     xs <- binders
+     reservedOp ":"
+     ty <- typeP
+     reservedOp "="
+     t <- expr
+     return (SDecl i True f xs (tybinds xs ty) t)
+
 
 -- | Parser de programas (listas de declaraciones) 
-program :: P [Decl STerm]
+program :: P [SDecl STerm]
 program = many decl
 
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
-declOrTm :: P (Either (Decl STerm) STerm)
+declOrTm :: P (Either (SDecl STerm) STerm)
 declOrTm =  try (Left <$> decl) <|> (Right <$> expr)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada

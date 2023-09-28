@@ -45,3 +45,14 @@ elab' env (SLet p (v,vty) def body) =
 
 elabDecl :: Decl STerm -> Decl Term
 elabDecl = fmap elab
+
+desugarDecl :: SDecl -> m Decl STerm
+desugar (SDecl i False v [] ty t) = do t' <- desugar t
+                                       return (Decl i v ty t')
+desugar (SDecl i _ f [] _ _) = error ("No arguments for function: " ++ show f)
+desugar (SDecl i False f xs ty t) = do t' <- desugar (SLam i xs t)
+                                       return (Decl i f ty t')
+desugar (SDecl i True f ((v1, t1):[]) ty t) = do t' <- desugar (SFix i (f, ty) [(v1, t1)] t)
+                                                 return (Decl i f ty t')
+desugar (SDecl i True f ((v1, t1):xs) ty t) = do t' <- desugar (SLam i xs (SFix i (f, ty) [(v1, t1)] t))
+                                                 return (Decl i f ty t')                                                 
