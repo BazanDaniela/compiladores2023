@@ -46,7 +46,7 @@ parseMode :: Parser (Mode,Bool)
 parseMode = (,) <$>
       (flag' Typecheck ( long "typecheck" <> short 't' <> help "Chequear tipos e imprimir el término")
   -- <|> flag' InteractiveCEK (long "interactiveCEK" <> short 'k' <> help "Ejecutar interactivamente en la CEK")
-  -- <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
+     <|> flag' Bytecompile (long "bytecompile" <> short 'm' <> help "Compilar a la BVM")
   -- <|> flag' RunVM (long "runVM" <> short 'r' <> help "Ejecutar bytecode en la BVM")
       <|> flag Interactive Interactive ( long "interactive" <> short 'i' <> help "Ejecutar en forma interactiva")
       <|> flag Eval        Eval        (long "eval" <> short 'e' <> help "Evaluar programa")

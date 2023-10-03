@@ -32,7 +32,7 @@ data Mode =
   | Typecheck
   | Eval
   -- | InteractiveCEK
-  -- | Bytecompile
+  | Bytecompile
   -- | RunVM
   -- | CC
   -- | Canon
