@@ -142,3 +142,30 @@ freeVars tm = nubSort $ go tm [] where
   go (IfZ _ c t e             ) xs = go c $ go t $ go e xs
   go (Const _ _               ) xs = xs
   go (Let _ _ _ e (Sc1 t)     ) xs = go e (go t xs)
+
+-- CEK
+
+-- Tipo de datos dedicado a los valores
+data Val = N Int | Cl Clos
+  deriving Show
+
+-- Los entornos son una lista de valores
+type Env = [Val]
+
+-- Tipo de datos para Clos
+data Clos = ClosFun Env Name TTerm | ClosFix Env Name Name TTerm
+  deriving Show
+
+-- Frames definidos con un tipo algebraico
+data Frame =
+    KArg Env TTerm
+  | KClos Clos
+  | KIfz Env TTerm TTerm
+  | KArgOp Env BinaryOp TTerm
+  | KValOp BinaryOp Val
+  | KPrint String
+  | KLet Env TTerm
+  deriving Show
+
+-- Las continuaciones son una lista de frames
+type Kont = [Frame]
