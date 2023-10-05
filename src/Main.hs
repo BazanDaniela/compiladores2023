@@ -29,10 +29,10 @@ import Options.Applicative
 import Global
 import Errors
 import Lang
-import Parse ( P, tm, program, declOrTm, runP )
-import Elab ( elab, desugarDecl )
+import Parse ( P, tm, program, tysynOrElse , runP )
+import Elab ( elab, desugarDecl, elabSyn )
 import Eval ( eval )
-import PPrint ( pp , ppTy, ppDecl )
+import PPrint ( pp , ppTy, ppSTy , ppDecl )
 import MonadFD4
 import TypeChecker ( tc, tcDecl )
 
@@ -130,36 +130,37 @@ parseIO filename p x = case runP p x filename of
                   Right r -> return r
 
 evalDecl :: MonadFD4 m => Decl TTerm -> m (Decl TTerm)
-evalDecl (Decl p x e) = do
+evalDecl (Decl p x ty e) = do
     e' <- eval e
-    return (Decl p x e')
+    return (Decl p x ty e')
 
 handleDecl ::  MonadFD4 m => SDecl STerm -> m ()
 handleDecl d = do
         m <- getMode
         case m of
           Interactive -> do
-              (Decl p x tt) <- typecheckDecl (desugarDecl d)
+              (Decl p x ty tt) <- typecheckDecl d
               te <- eval tt
-              addDecl (Decl p x te)
+              addDecl (Decl p x ty te)
           Typecheck -> do
               f <- getLastFile
               printFD4 ("Chequeando tipos de "++f)
-              td <- typecheckDecl (desugarDecl d)
+              td <- typecheckDecl d
               addDecl td
               -- opt <- getOpt
               -- td' <- if opt then optimize td else td
               ppterm <- ppDecl td  --td'
               printFD4 ppterm
           Eval -> do
-              td <- typecheckDecl (desugarDecl d)
+              td <- typecheckDecl d
               -- td' <- if opt then optimizeDecl td else return td
               ed <- evalDecl td
               addDecl ed
 
       where
-        typecheckDecl :: MonadFD4 m => Decl STerm -> m (Decl TTerm)
-        typecheckDecl (Decl p x t) = tcDecl (Decl p x (elab t))
+        typecheckDecl :: MonadFD4 m => SDecl STerm -> m (Decl TTerm)
+        typecheckDecl dec = do dec' <- desugarDecl dec
+                               tcDecl dec'
 
 
 data Command = Compile CompileForm
@@ -239,14 +240,27 @@ handleCommand cmd = do
 
 compilePhrase ::  MonadFD4 m => String -> m ()
 compilePhrase x = do
-    dot <- parseIO "<interactive>" declOrTm x
+    dot <- parseIO "<interactive>" tysynOrElse x
     case dot of
-      Left d  -> handleDecl d
-      Right t -> handleTerm t
+      Left (Left d ) -> handleDecl d
+      Left (Right t) -> handleTerm t
+      Right ty -> handleTysy ty
+
+--Handler para sinonimos de tipo
+handleTysy :: MonadFD4 m => SynTy -> m ()
+handleTysy t   = do
+                 (v,ty) <- elabSyn t
+                 s  <- get
+                 res <- lookupTysyn v
+                 case res of
+                     Nothing -> do {addTysyn (v,ty) ; printFD4 (v ++ " es el tipo: " ++ ppSTy ty)}
+                     Just _  -> failFD4 $ "El sinónimo de tipos " ++ v ++ " ya fue definido."
+
+
 
 handleTerm ::  MonadFD4 m => STerm -> m ()
 handleTerm t = do
-         let t' = elab t
+         t' <- elab t
          s <- get
          tt <- tc t' (tyEnv s)
          te <- eval tt
@@ -257,7 +271,7 @@ printPhrase   :: MonadFD4 m => String -> m ()
 printPhrase x =
   do
     x' <- parseIO "<interactive>" tm x
-    let ex = elab x'
+    ex <- elab x'
     tyenv <- gets tyEnv
     tex <- tc ex tyenv
     t  <- case x' of
@@ -271,7 +285,7 @@ printPhrase x =
 typeCheckPhrase :: MonadFD4 m => String -> m ()
 typeCheckPhrase x = do
          t <- parseIO "<interactive>" tm x
-         let t' = elab t
+         t' <- elab t
          s <- get
          tt <- tc t' (tyEnv s)
          let ty = getTy tt

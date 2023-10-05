@@ -33,6 +33,8 @@ module MonadFD4 (
   failFD4,
   addDecl,
   catchErrors,
+  addTysyn,
+  lookupTysyn,
   MonadFD4,
   module Control.Monad.Except,
   module Control.Monad.State)
@@ -49,7 +51,7 @@ import System.IO
 
 -- * La clase 'MonadFD4'
 
-{-| La clase de mónadas 'MonadFD4' clasifica a las mónadas con soporte para una configuración Global 'Global.Conf', 
+{-| La clase de mónadas 'MonadFD4' clasifica a las mónadas con soporte para una configuración Global 'Global.Conf',
     para operaciones @IO@, estado de tipo 'Global.GlEnv', y errores de tipo 'Errors.Error'.
 
 Las mónadas @m@ de esta clase cuentan con las operaciones:
@@ -62,7 +64,7 @@ Las mónadas @m@ de esta clase cuentan con las operaciones:
 
 y otras operaciones derivadas de ellas, como por ejemplo
    - @modify :: (GlEnv -> GlEnv) -> m ()@
-   - @gets :: (GlEnv -> a) -> m a@  
+   - @gets :: (GlEnv -> a) -> m a@
 -}
 class (MonadIO m, MonadState GlEnv m, MonadError Error m, MonadReader Conf m) => MonadFD4 m where
 
@@ -90,6 +92,9 @@ getLastFile = gets lfile
 addDecl :: MonadFD4 m => Decl TTerm -> m ()
 addDecl d = modify (\s -> s { glb = d : glb s, cantDecl = cantDecl s + 1 })
 
+addTysyn :: MonadFD4 m => (Name,STy) -> m()
+addTysyn d = modify(\s -> s {tysyns = d: tysyns s})
+
 eraseLastFileDecls :: MonadFD4 m => m ()
 eraseLastFileDecls = do
       s <- get
@@ -110,6 +115,11 @@ lookupTy :: MonadFD4 m => Name -> m (Maybe Ty)
 lookupTy nm = do
       s <- get
       return $ lookup nm (tyEnv s)
+
+lookupTysyn :: MonadFD4 m => Name -> m (Maybe STy)
+lookupTysyn nm = do
+    s <- get
+    return $ lookup nm (tysyns s)
 
 failPosFD4 :: MonadFD4 m => Pos -> String -> m a
 failPosFD4 p s = throwError (ErrPos p s)
@@ -135,7 +145,7 @@ type FD4 = ReaderT Conf (StateT GlEnv (ExceptT Error IO))
 -- | Esta es una instancia vacía, ya que 'MonadFD4' no tiene funciones miembro.
 instance MonadFD4 FD4
 
--- 'runFD4\'' corre una computación de la mónad 'FD4' en el estado inicial 'Global.initialEnv' 
+-- 'runFD4\'' corre una computación de la mónad 'FD4' en el estado inicial 'Global.initialEnv'
 runFD4' :: FD4 a -> Conf -> IO (Either Error (a, GlEnv))
 runFD4' c conf =  runExceptT $ runStateT (runReaderT c conf)  initialEnv
 

@@ -46,12 +46,17 @@ data Ty =
 -- | AST de Tipos superficiales
 data STy =
       SNatTy
+    | STVar Name
     | SFunTy STy STy
     deriving (Show,Eq)
 
+-- | Sinonimos de tipo
+data SynTy  =  SSyn Pos Name STy
+               deriving Show
+
 type Name = String
 
-type STerm = STm Pos Ty Name -- ^ 'STm' tiene 'Name's como variables ligadas y libres y globales, guarda posición  
+type STerm = STm Pos STy Name -- ^ 'STm' tiene 'Name's como variables ligadas y libres y globales, guarda posición
 
 newtype Const = CNat Int
   deriving Show
@@ -73,16 +78,16 @@ data SDecl a = SDecl
   { sDeclPos  :: Pos
   , sDeclRec :: Bool
   , sDeclName :: Name
-  , sDeclArgs :: [(Name, Ty)]
-  , sDeclTy :: Ty
+  , sDeclArgs :: [(Name, STy)]
+  , sDeclTy :: STy
   , sDeclBody :: a
   }
   deriving (Show, Functor)
 
--- | AST de los términos. 
---   - info es información extra que puede llevar cada nodo. 
+-- | AST de los términos.
+--   - info es información extra que puede llevar cada nodo.
 --       Por ahora solo la usamos para guardar posiciones en el código fuente.
---   - var es el tipo de la variables. Es 'Name' para fully named y 'Var' para locally closed. 
+--   - var es el tipo de la variables. Es 'Name' para fully named y 'Var' para locally closed.
 data Tm info var =
     V info var
   | Const info Const
@@ -110,7 +115,7 @@ newtype Scope info var = Sc1 (Tm info var)
   deriving Functor
 newtype Scope2 info var = Sc2 (Tm info var)
   deriving Functor
-    
+
 instance (Show info, Show var) => Show (Scope info var) where
     show (Sc1 t) = "{"++show t++"}"
 

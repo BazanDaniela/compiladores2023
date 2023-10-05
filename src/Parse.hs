@@ -10,7 +10,7 @@ Stability   : experimental
 
 -}
 
-module Parse (tm, Parse.parse, decl, runP, P, program, declOrTm) where
+module Parse (tm, Parse.parse, decl, runP, P, program, tysynOrElse, tysyn) where
 
 import Prelude hiding ( const )
 import Lang hiding (getPos)
@@ -43,7 +43,7 @@ langDef = emptyDef {
 whiteSpace :: P ()
 whiteSpace = Tok.whiteSpace lexer
 
-natural :: P Integer 
+natural :: P Integer
 natural = Tok.natural lexer
 
 stringLiteral :: P String
@@ -81,19 +81,20 @@ getPos :: P Pos
 getPos = do pos <- getPosition
             return $ Pos (sourceLine pos) (sourceColumn pos)
 
-tyatom :: P Ty
-tyatom = (reserved "Nat" >> return NatTy)
+tyatom :: P STy
+tyatom = (reserved "Nat" >> return SNatTy)
+         <|> do {x <- identifier ; return $ STVar x}
          <|> parens typeP
 
-typeP :: P Ty
-typeP = try (do 
+typeP :: P STy
+typeP = try (do
           x <- tyatom
           reservedOp "->"
           y <- typeP
-          return (FunTy x y))
+          return (SFunTy x y))
       <|> tyatom
 
-binders :: P [(Name,Ty)]
+binders :: P [(Name,STy)]
 binders = try (do
             x <- parens binding
             xs <- binders
@@ -101,20 +102,30 @@ binders = try (do
             <|>
             return []
 
-tybinds :: [(Name,Ty)] -> Ty -> Ty
+tybinds :: [(Name,STy)] -> STy -> STy
 tybinds [] ty     = ty
-tybinds (x:xs) ty = FunTy (snd x) (tybinds xs ty)
+tybinds (x:xs) ty = SFunTy (snd x) (tybinds xs ty)
 
 const :: P Const
 const = CNat <$> num
 
-printOp :: P STerm
-printOp = do
+printOpApp :: P STerm
+printOpApp = do
   i <- getPos
   reserved "print"
   str <- option "" stringLiteral
   a <- atom
   return (SPrint i str a)
+
+printOpNoApp :: P STerm
+printOpNoApp = do
+  i <- getPos
+  reserved "print"
+  str <- option "" stringLiteral
+  return (SLam i [("x",SNatTy)] (SPrint i str (SV i "x")))
+
+printOp :: P STerm
+printOp = try printOpApp <|> printOpNoApp
 
 binary :: String -> BinaryOp -> Assoc -> Operator String () Identity STerm
 binary s f = Ex.Infix (reservedOp s >> return (SBinaryOp NoPos f))
@@ -133,7 +144,7 @@ atom =     (flip SConst <$> const <*> getPos)
        <|> printOp
 
 -- parsea un par (variable : tipo)
-binding :: P (Name, Ty)
+binding :: P (Name, STy)
 binding = do v <- var
              reservedOp ":"
              ty <- typeP
@@ -178,7 +189,7 @@ letcorexp = do
   i <- getPos
   reserved "let"
   (v,ty) <- (parens binding <|> binding)
-  reservedOp "="  
+  reservedOp "="
   def <- expr
   reserved "in"
   body <- expr
@@ -212,11 +223,11 @@ letrecexp = do i <- getPos
                reserved "in"
                t' <- expr
                case xs of
-                []  -> return (SLet i (f,FunTy t1 ty)(SFix i (f, FunTy t1 ty) [(v1,t1)] t) t')
+                []  -> return (SLet i (f,SFunTy t1 ty)(SFix i (f, SFunTy t1 ty) [(v1,t1)] t) t')
                 xts -> return (SLet i (f,tybinds ((v1,t1):xs) ty)(SLam i xts (SFix i (f,tybinds ((v1,t1):xs) ty) xs t)) t')
 
 letexp :: P STerm
-letexp = (try letrecexp) <|> (try letcorexp) <|> letfexp 
+letexp = (try letrecexp) <|> (try letcorexp) <|> letfexp
 
 -- | Parser de términos
 tm :: P STerm
@@ -228,7 +239,7 @@ decl = (try declVar) <|> (try declFun) <|> declRec
 
 -- Parser declaraciones azucaradas
 declVar :: P (SDecl STerm)
-declVar = do 
+declVar = do
      i <- getPos
      reserved "let"
      (v, ty) <- parens binding <|> binding
@@ -237,7 +248,7 @@ declVar = do
      return (SDecl i False v [] ty t)
 
 declFun :: P (SDecl STerm)
-declFun = do 
+declFun = do
      i <- getPos
      reserved "let"
      f <- var
@@ -249,7 +260,7 @@ declFun = do
      return (SDecl i False f xs (tybinds xs ty) t)
 
 declRec :: P (SDecl STerm)
-declRec = do 
+declRec = do
      i <- getPos
      reserved "let"
      reserved "rec"
@@ -261,15 +272,25 @@ declRec = do
      t <- expr
      return (SDecl i True f xs (tybinds xs ty) t)
 
+tysyn :: P SynTy
+tysyn = do i <- getPos
+           reserved "type"
+           v <- var
+           reservedOp "="
+           t <- typeP
+           return (SSyn i v t)
 
--- | Parser de programas (listas de declaraciones) 
+-- | Parser de programas (listas de declaraciones)
 program :: P [SDecl STerm]
 program = many decl
 
 -- | Parsea una declaración a un término
 -- Útil para las sesiones interactivas
 declOrTm :: P (Either (SDecl STerm) STerm)
-declOrTm =  try (Left <$> decl) <|> (Right <$> expr)
+declOrTm = try (Left <$> decl) <|> (Right <$> expr)
+
+tysynOrElse :: P (Either (Either (SDecl STerm) STerm) SynTy)
+tysynOrElse = try (Left <$> declOrTm) <|> (Right <$> tysyn)
 
 -- Corre un parser, chequeando que se pueda consumir toda la entrada
 runP :: P a -> String -> String -> Either ParseError a
