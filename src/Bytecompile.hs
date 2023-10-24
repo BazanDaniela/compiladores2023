@@ -73,6 +73,7 @@ pattern DROP     = 12
 pattern PRINT    = 13
 pattern PRINTN   = 14
 pattern JUMP     = 15
+pattern IFZ      = 16
 
 --función util para debugging: muestra el Bytecode de forma más legible.
 showOps :: Bytecode -> [String]
@@ -94,13 +95,41 @@ showOps (PRINT:xs)       = let (msg,_:rest) = span (/=NULL) xs
                            in ("PRINT " ++ show (bc2string msg)) : showOps rest
 showOps (PRINTN:xs)      = "PRINTN" : showOps xs
 showOps (ADD:xs)         = "ADD" : showOps xs
+--showOps (IFZ:xs)         = "IFZ" : showOps xs
 showOps (x:xs)           = show x : showOps xs
 
 showBC :: Bytecode -> String
 showBC = intercalate "; " . showOps
 
 bcc :: MonadFD4 m => TTerm -> m Bytecode
-bcc t = failFD4 "implementame!"
+bcc (Const i n) =  return (CONST:n:[])
+bcc (BinaryOp i Add t1 t2) = do ct1 <- bcc t1
+                                ct2 <- bcc t2
+                                return $ ct1 ++ ct2 ++ [ADD]
+bcc (BinaryOp i Sub t1 t2) = do ct1 <- bcc t1
+                                ct2 <- bcc t2
+                                return $ ct1 ++ ct2 ++ [SUB]
+bcc (BinaryOp i _ t1 t2) = failFD4 "Solo se implemento suma y resta."
+bcc (V i (Bound n)) = return $ ACCESS:n:[]
+bcc (App i t1 t2) = do ct1 <- bcc t1
+                       ct2 <- bcc t2
+                       return $ ct1 ++ ct2 ++ [CALL]
+bcc (Lam i f fty (Sc1 _ t)) = do ct <- bcc t
+                               return $ FUNCTION : len(ct) : ct
+bcc (Print i str t) = do ct <- bcc t
+                         printFD4 str
+                         return $ [PRINTN] ++ ct ++ [NULL]
+-- falta Fix, Ifz y variables globales
+bcc (Let i x _ t1 (Sc1 _ t)) = do ct1 <- bcc t1
+                                ct  <- bcc t
+                                return $ ct1 ++ [SHIFT] ++ ct ++ [DROP]
+bcc (Fix i f _ x _ (Sc2 _ t)) = failFD4 "implementame!"
+-- Hay que modificar el if (añadir longitudes)
+--bcc (IfZ _ b t1 t2) = do cb  <- bcc b
+--                         ct1 <- bcc ct1
+--                         ct2 <- bcc ct2
+--                         return $ [IFZ] ++ cb ++ ct1 ++ ct2
+bcc f = failFD4 "implementame!"
 
 -- ord/chr devuelven los codepoints unicode, o en otras palabras
 -- la codificación UTF-32 del caracter.
